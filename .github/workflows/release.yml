@@ -1,0 +1,248 @@
+name: Release
+
+on:
+  pull_request:
+    branches: [ "master" ]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -Dwarnings
+  RUST_BACKTRACE: 1
+
+jobs:
+  diff-crates:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+    - name: Checkout rust code
+      uses: actions/checkout@v4
+      with:
+        fetch-tags: true
+        sparse-checkout: |
+          Cargo.*
+          **/Cargo.*
+          **/*.rs
+
+    - name: Get changed rust files
+      id: changed-crates
+      uses: tj-actions/changed-files@v42
+      with:
+        dir_names: true
+        dir_names_exclude_current_dir: true
+        dir_names_max_depth: 1
+        files_ignore: ./Cargo.*
+        files_yaml: |
+          **
+            - *.rs
+            - Cargo.*
+        json: true
+
+    - name: Guard
+      if: steps.changed-crates.outputs.any_changed == 'true'
+      run: echo "No crate changes detected; no other jobs will be executed."
+
+    - name: List changed crates
+      run: |
+        echo "List all the files that have changed: ${{ steps.changed-crates.outputs.all_changed_files }}"
+
+    - name: Set crates for matrix
+      if: steps.changed-crates.outputs.any_changed
+      id: set-matrix
+      run: echo "::set-output name=matrix::${{ steps.changed-crates.outputs.all_changed_files }}"
+
+
+  publish:
+    if: ${{ fromJson( needs.diff-crates.outputs.matrix ) }}
+    needs: [ diff-crates ]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        package: ${{ fromJson( needs.diff-crates.outputs.matrix ) }}
+    outputs:
+      manifest: ${{ steps.parse-manifest.outputs.manifest }}
+      name: ${{ steps.parse-manifest.outputs.name }}
+      package: ${{ matrix.package }}
+      semver: ${{ steps.parse-manifest.outputs.semver }}
+      release: ${{ steps.parse-manifest.outputs.release }}
+    steps:
+    - name: Checkout ${{ matrix.package }}
+      uses: actions/checkout@v4
+      with:
+        fetch-tags: true
+        sparse-checkout: |
+          Cargo.*
+          **/Cargo.*
+          **/*.rs
+
+    - name: Parse manifest for ${{ matrix.package }}
+      id: parse-manifest
+      shell: bash
+      run: |
+        cd ${{ matrix.package }}
+        MANIFEST=$(echo "cargo read-manifest -q")
+        echo "::set-output name=manifest::${MANIFEST}
+        VERSION=$(echo "echo $MANIFEST | jq .version")
+        echo "::set-output name=semver::${VERSION}
+        NAME=$((echo "echo $MANIFEST | jq .name")
+        echo "::set-output name=name::${NAME}"
+
+    - name: Skip v0.0.0 for ${{ matrix.package }}
+      env:
+        SEMVER: ${{ steps.parse-manifest.outputs.semver }}
+      run: "[[ ${{ env.SEMVER }} == 0.0.0 ]] && exit 1"
+
+    - name: Check semver for ${{ matrix.package }}
+      uses: obi1kenobi/cargo-semver-checks-action@v2
+      with:
+        manifest-path: "${{ matrix.package }}/Cargo.toml"
+
+    - name: Publish ${{ matrix.package }} on crates.io
+      shell: bash
+      run: |
+        cargo publish \
+          --locked \
+          --manifest-path="${{ matrix.package }}/Cargo.toml" \
+          --token ${{ secrets.CARGO_REGISTRY_TOKEN }} \
+          ${{ vars.CARGO_PUBLISH_ARGS}}
+
+    - name: Create Github release for ${{ matrix.package }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        SEMVER: ${{ steps.parse-manifest.outputs.semver }}
+      run: |
+        RELEASE="${{ matrix.package }}-v${{ env.SEMVER }}"
+        echo "::set-output name=release::${RELEASE}"
+        gh release create ${RELEASE}
+
+
+  release:
+    if: ${{ fromJson( needs.diff-crates.outputs.matrix ) }}
+    needs: [
+      diff-crates,
+      publish,
+    ]
+    strategy:
+      matrix:
+        package: ${{ fromJson( needs.publish.outputs.package ) }}
+        platform: [
+          # 64-bit (x86)
+          {
+            build: linux-x64,
+            runner: ubuntu-latest,
+            target: x86_64-unknown-linux-gnu,
+            command: cargo,
+            archive: tar.gz,
+          }, {
+            build: macos-x64,
+            runner: macos-latest,
+            target: x86_64-apple-darwin,
+            command: cargo,
+            archive: zip,
+          },
+          # 64-bit (ARM)
+          {
+            build: linux-arm64,
+            runner: ubuntu-latest,
+            target: aarch64-unknown-linux-gnu,
+            command: cross,
+            archive: tar.gz,
+          }, {
+            build: macos-arm64,
+            runner: macos-latest,
+            target: aarch64-apple-darwin,
+            command: cargo,
+            archive: zip,
+          },
+          # universal2 (MAC)
+          {
+            build: macos-universal,
+            runner: ubuntu-latest,
+            target: universal2-apple-darwin,
+            target-deps: "x86_64-apple-darwin aarch64-apple-darwin",
+            command: zigbuild,
+            archive: zip,
+          },
+        ]
+    runs-on: ${{ matrix.platform.runner }}
+    steps:
+      - name: Checkout ${{ matrix.package }}
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            Cargo.*
+            **/Cargo.*
+            **/*.rs
+
+      # CARGO (PREP)
+      - name: Setup rust toolchain for ${{ matrix.package }} on ${{ matrix.platform.runner }}
+        # if cargo is used (cargo build or zigbuild)
+        if: ${{ matrix.platform.command != 'cross' }}
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform.target }} ${{ matrix.platform.target-deps }}
+          toolchain: stable
+
+      # CARGO BUILD
+      - name: Cargo build ${{ matrix.package }} binary for ${{ matrix.platform.build }} on ${{ matrix.platform.runner }}
+        if: ${{ matrix.platform.command == 'cargo' }}
+        run: cargo build --release --locked --target=${{ matrix.platform.target }}
+
+      # CROSS BUILD
+      - name: Cross build ${{ matrix.package }} binary for ${{ matrix.platform.build }} on ${{ matrix.platform.runner }}
+        if: ${{ matrix.platform.command == 'cross' }}
+        uses: houseabsolute/actions-rust-cross@v0
+        with:
+          command: build
+          target: ${{ matrix.platform.target }}
+          toolchain: stable
+          args: --locked --release --config
+            "target.'cfg(all(target_arch=\"arm\",target_os=\"none\"))'.pre-build=[
+              'dpkg --add-architecture $CROSS_DEB_ARCH',
+              'apt-get update && apt-get --assume-yes install libssl-dev:$CROSS_DEB_ARCH'
+            ]"
+
+      # ZIGBUILD
+      # FUTURE: use zigbuild container instead of installing it
+      - name: Zigbuild ${{ matrix.package }} binary for ${{ matrix.platform.build }} on ${{ matrix.platform.runner }}
+        if: ${{ contains(matrix.platform.build, 'universal') }}
+        run: |
+          cargo install cargo-zigbuild
+          cargo zigbuild --release --locked --target ${{ matrix.platform.target }}
+
+      - name: Cache ${{ matrix.package }} binary for ${{ matrix.platform.build }}
+        uses: Swatinem/rust-cache@v2
+
+      - name: Determine binary file ending
+        id: det-file-ending
+        shell: bash
+        env:
+          MANIFEST: ${{ needs.publish.outputs.manifest }}
+        run: |
+          if [[ ${{ env.MANIFEST }} =~ "cdylib" ]]; then
+            echo "::set-output name=ending::.so"
+          else
+            echo "::set-output name=ending::"
+          fi
+
+      - name: Create ${{ matrix.package }} archive for ${{ matrix.platform.build }}
+        # https://github.com/actions/upload-artifact?tab=readme-ov-file
+        id: archive
+        env:
+          ARCHIVE: "op-${{ matrix.package }}-${{ matrix.platform.build }}.${{ matrix.platform.archive }}"
+          NAME: ${{ needs.publish.outputs.name }}${{ steps.det-file-ending.outputs.ending }}"
+          TMP: ".github/workflows/tmp-${{ matrix.package }}-${{ matrix.platform.build }}-v${{ needs.publish.outputs.semver }}"
+        shell: bash
+        run: |
+          mkdir ${{ env.TMP }}
+          cp LICENSE README.md "target/${{ matrix.platform.target }}/release/${{ env.NAME }}" "${{ env.TMP }}"
+          7z a "${{ env.ARCHIVE }}" "${{ env.TMP }}/*"
+          echo "${{ env.ARCHIVE }}" >> $GITHUB_OUTPUT
+          echo "::set-output name=archive::${{ env.ARCHIVE }}"
+
+      - name: Upload ${{ matrix.package }} archive for ${{ matrix.platform.build }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARCHIVE: ${{ steps.archive.outputs.archive }}
+        run: gh release upload ${{ needs.publish.outputs.release }} ${{ env.ARCHIVE }}

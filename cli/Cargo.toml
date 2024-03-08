@@ -1,0 +1,29 @@
+[package]
+name = "openproject-client-cli"
+version = "0.0.0"
+description = "Command line interface for OpenProject"
+repository = "https://github.com/HMG-Software/op-rs"
+homepage = "https://github.com/HMG-Software/op-rs/tree/master/cli"
+license = "GPL-3.0-only"
+authors = [
+    "Christoph Kröppl <ch.kroeppl@gmx.at>",
+    "HMG Software LLC <git@hmg.software>",
+]
+edition = "2021"
+publish = false
+
+[dependencies]
+clap = "4"
+
+[dev-dependencies]
+clippy = "*"
+
+[[bin]]
+name = "openproject-cli"
+path = "src/main.rs"
+
+[profile.release]
+codegen-units = 1
+lto = true
+strip = true
+debug = false

@@ -1,0 +1,50 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "setup",
+      "linux": {
+        "command": "just",
+        "args": ["setup"],
+      },
+      "type": "shell",
+      "group": "build",
+    },
+    {
+      "label": "test",
+      "linux": {
+        "command": "just",
+        "args": ["test"],
+      },
+      "type": "shell",
+      "group": "test",
+    },
+    {
+      "label": "build",
+      "linux": {
+        "command": "just",
+        "args": ["build-dev"],
+      },
+      "type": "shell",
+      "group": "build",
+    },
+    {
+      "label": "install",
+      "linux": {
+        "command": "just",
+        "args": ["install-dev"],
+      },
+      "type": "shell",
+      "group": "build",
+    },
+    {
+      "label": "lint",
+      "linux": {
+        "command": "just",
+        "args": ["lint-dev"],
+      },
+      "type": "shell",
+      "group": "test",
+    },
+  ]
+}
