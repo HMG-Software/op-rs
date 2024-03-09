@@ -13,7 +13,11 @@ edition = "2021"
 publish = false
 
 [dependencies]
-clap = "4"
+clap = { version = "4", features = ["cargo", "derive"] }
+clap_complete = "4"
+csv = "1"
+serde = { version = "1", features = ["derive"] }
+xdg = "2"
 
 [dev-dependencies]
 clippy = "*"
