@@ -99,9 +99,9 @@ pub(crate) struct Fetch {
     work_package: Option<isize>,
 }
 
-/// parse a string into TimeDelta
+/// parse an input string into TimeDelta
 ///
-/// possible inputs:
+/// possible input format examples:
 /// - "45m" (45 minutes)
 /// - "1" (1 hour)
 /// - "1h" (1 hour)
@@ -114,6 +114,9 @@ pub(crate) struct Fetch {
 /// - ":30" (30 minutes)
 /// - ":30m" (30 minutes)
 /// - "1:30" (1 hour, 30 minutes)
+/// - "PT30M" (30 minutes)
+/// - "PT1H30M" (1 hour, 30 minutes)
+/// - "PT1H" (1 hour)
 pub(crate) fn parse_hours(s: &str) -> Result<TimeDelta, String> {
     let seconds = 900;
 
