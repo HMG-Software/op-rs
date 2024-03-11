@@ -2,13 +2,12 @@
 
 use serde::Deserialize;
 
-
 #[derive(Debug, serde::Deserialize)]
 struct Timesheet {
-    id: i8,
+    id: isize,
     name: String,
-    position: i8,
+    position: isize,
     default: bool,
-    #[serde(with = "OpenProjectLinkTitle")]
-    projects: vec<OPLink>,
+    // #[serde(with = "OpenProjectLinkTitle")]
+    // projects: vec<crate::schema::Link>,
 }

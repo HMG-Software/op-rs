@@ -1,9 +1,12 @@
 [package]
 name = "openproject-client-cli"
 version = "0.0.0"
-description = "Command line interface for OpenProject"
-repository = "https://github.com/HMG-Software/op-rs"
+description = "CLI for OpenProject"
+documentation = "https://docs.rs/openproject-client-cli"
 homepage = "https://github.com/HMG-Software/op-rs/tree/master/cli"
+repository = "https://github.com/HMG-Software/op-rs"
+readme = "README.md"
+resolve = "2"
 license = "GPL-3.0-only"
 authors = [
     "Christoph Kröppl <ch.kroeppl@gmx.at>",
@@ -15,12 +18,24 @@ publish = false
 [dependencies]
 clap = { version = "4", features = ["cargo", "derive"] }
 clap_complete = "4"
+clap_mangen = "0.2"
+chrono = { version = "0.4", features = ["serde"] }
 csv = "1"
 serde = { version = "1", features = ["derive"] }
-xdg = "2"
+
+[dependencies.lib]
+features = ["cache", "config"]
+package = "openproject-client-lib"
+# version = "0.1.0"
+path = "../lib"
 
 [dev-dependencies]
 clippy = "*"
+
+[features]
+cache = ["lib/cache"]
+config = ["lib/config"]
+default = ["cache", "config"]
 
 [[bin]]
 name = "openproject-cli"
@@ -31,3 +46,6 @@ codegen-units = 1
 lto = true
 strip = true
 debug = false
+
+[target.universal2-apple-darwin.build-dependencies]
+cargo-zigbuild = "0"

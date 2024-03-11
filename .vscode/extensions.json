@@ -3,7 +3,6 @@
     "EditorConfig.EditorConfig",
     "serayuzgur.crates",
     "rust-lang.rust-analyzer",
-    "ms-azuretools.vscode-docker",
     "kokakiwi.vscode-just",
     "github.vscode-github-actions"
   ]
