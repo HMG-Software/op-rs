@@ -19,13 +19,26 @@ categories = ["development-tools", "database"]
 
 [dependencies]
 chrono = { version = "0.4", features = ["serde"] }
+de_env = "1"
+diff-struct = "^0.5"
 dirs = { version = "5", optional = true }
 iso8601 = "0"
-reqwest = "0"
+reqwest = { version = "^0.11", features = ["json", "multipart"] }
 serde = "1"
+serde_derive = "1"
+serde-inline-default = "0.2"
+serde_json = "1"
+serde_with = "^2"
+basic-toml = "^0.1"
+url = "^2.2"
+uuid = { version = "^1.0", features = ["serde", "v4"] }
 
 [dev-dependencies]
 clippy = "*"
+schematools-cli = "0"
+
+[build-dependencies]
+cbindgen = "0"
 
 [features]
 default = []
@@ -33,7 +46,7 @@ config = ["dep:dirs"]
 cache = ["dep:dirs"]
 
 [lib]
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
 name = "opc" # "lib" gets prepended by cargo
 
 [[bin]]

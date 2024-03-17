@@ -1,3 +1,6 @@
+pub(crate) mod default;
+pub(crate) mod parser;
+
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
@@ -14,19 +17,28 @@ const NAME: &str = env!("CARGO_PKG_NAME");
 )]
 #[command(propagate_version = true)]
 pub(crate) struct Cli {
-    /// Provide an OpenProject API Token or store it in
-    /// `~/.op/token`
+    #[command(subcommand)]
+    pub command: Option<Commands>,
+
+    #[cfg(feature = "config")]
+    #[arg(
+        global = true,
+        long,
+        short = 'c',
+        value_name = "CONFIG-FILE",
+        env = "OPENPROJECT_CONFIG_PATH",
+    )]
+    pub config_path: Option<PathBuf>,
+
     #[arg(
         global = true,
         hide_default_value = true,
         long,
         short = None,
         value_name = "API-TOKEN",
+        value_parser = parser::token,
     )]
-    token: Option<PathBuf>,
-
-    #[command(subcommand)]
-    command: Option<Commands>,
+    pub token: Option<String>,
 }
 
 // Add new subcommands here
@@ -37,7 +49,7 @@ enum Commands {
         arg_required_else_help = true,
         subcommand,
     )]
-    TimeEntry(crate::timesheet::command::TimeEntry),
+    TimeEntry(crate::time_entry::command::TimeEntry),
 }
 
 #[test]

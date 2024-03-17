@@ -1,0 +1,84 @@
+crate := "openproject-client-lib"
+c-header := "libopc.h"
+spec_path := ".codegen/rust"
+spec:= spec_path / "spec.json"
+invalid_models := """
+    .components.schemas.QueryModel
+    .components.schemas.GroupModel
+"""
+op_api_version := `jq .openapi .codegen/rust/spec.json | tr -d '"'`
+
+cbindgen := path_exists(home_directory()/".cargo/bin/cbindgen")
+# schematools := path_exists(home_directory()/".cargo/bin/schematools")
+
+
+cbindgen: prep-cbindgen
+    cbindgen --config codegen/c/cbindgen.toml --crate {{ crate }} --output {{ c-header }}
+
+# Generate the Rust client library
+# with docker
+#
+# USER:
+#         --user {{ uid }}:{{ gid }} \
+#         --volume="/etc/group:/etc/group:ro" \
+#         --volume="/etc/passwd:/etc/passwd:ro" \
+#         --volume="/etc/shadow:/etc/shadow:ro" \
+#
+# FUTURE: use nix flake instead
+#         https://github.com/OpenAPITools/openapi-generator/blob/master/flake.nix
+generate-rust:
+    @docker run \
+        --rm \
+        --volume="{{ justfile_directory() }}/codegen/rust:/local/in:ro" \
+        --volume="{{ justfile_directory() }}/out/rust:/local/out" \
+        openapitools/openapi-generator-cli \
+        generate \
+            --skip-validate-spec \
+            -i /local/in/valid.json \
+            -g rust \
+            --additional-properties=\
+                library=reqwest,\
+                packageName=openproject-api.\
+                packageVersion={{ op_api_version }} \
+            -o /local/out/openapi
+
+fetch-spec:
+    curl -sS https://community.openproject.org/api/v3/spec.yml > .codegen/rust/spec.yml
+    curl -sS https://community.openproject.org/api/v3/spec.json > {{ spec }}
+
+update-rust:
+    \cp -rf out/rust/openapi/src/apis/* src/apis/
+    \cp -rf out/rust/openapi/src/models/* src/models/
+    \cp -rf out/rust/openapi/docs/* docs/
+    \cp -f out/rust/openapi/README.md* GENERATED_README.md
+
+fix:
+    cargo fix --lib -p openproject-client-lib --allow-dirty
+    cargo fmt -p openproject-client-lib
+
+# shorten-comment:
+#     remove 2 lines if 1 starts with:
+#     * You're looking at the current **stable** documentation of the OpenProject APIv
+
+prep-cbindgen:
+    @if ! {{ cbindgen }}; then \
+        echo "Installing cbindgen"; \
+        cargo install cbindgen; \
+    fi
+
+# remove invalid models
+prep-spec:
+    #!/bin/bash
+    tmp=$(mktemp)
+    tmp2=$(mktemp)
+    \cp -f {{ spec }} "${tmp}"
+    echo "Removing invalid models from spec:"
+    echo "{{ invalid_models }}"
+    for model in $(echo "{{ invalid_models }}" | sed "s/\n/ /g" | tr -d '"'); do
+        echo "Removing invalid model from spec: ${model}";
+        jq -r 'del('${model}')' "${tmp}" > "${tmp2}";
+        \cp -f "${tmp2}" "${tmp}";
+    done
+    mv "${tmp}" {{ join(spec_path, "valid.json") }}
+
+rustgen: fetch-spec prep-spec generate-rust update-rust fix

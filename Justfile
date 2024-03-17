@@ -28,6 +28,7 @@ target_release := """
     x86_64-apple-darwin
     x86_64-unknown-linux-gnu
 """
+zigbuild := path_exists(home_directory()/".cargo/bin/cargo-zigbuild")
 
 
 set ignore-comments
@@ -35,7 +36,7 @@ set shell := ["bash", "-c"]
 
 
 # build for the local machine
-build-dev: install-rustup setup lint-dev
+build-dev: prep setup lint-dev
     @echo "Compiling development binaries for target: {{ target_dev }}"
     cargo build --target {{ target_dev }}
 
@@ -55,15 +56,6 @@ install-dev: build-dev
     install -Dm755 target/{{ cli }} /bin/{{ cli }}
     install -Dm755 target/{{ lib }} /usr/lib/{{ lib }}
 
-# Install rustup if rustc or cargo are not installed
-install-rustup:
-    @if command -v rustc &> /dev/null || command -v cargo &> /dev/null; then \
-        echo "Rustc and Cargo are already installed"; \
-    else \
-        echo "Installing rustup (rustc & cargo)"; \
-        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh; \
-    fi
-
 check:
     cargo fmt -- --check
 
@@ -74,6 +66,15 @@ lint:
 lint-dev: check
     cargo clippy --all-targets --all-features -- -D warnings -W clippy::pedantic
     cargo clippy --fix
+
+# Install rustup if rustc or cargo are not installed
+prep:
+    @if command -v rustc &> /dev/null || command -v cargo &> /dev/null; then \
+        echo "Rustc and Cargo are already installed"; \
+    else \
+        echo "Installing rustup (rustc & cargo)"; \
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh; \
+    fi
 
 publish: test
     cargo publish
@@ -100,7 +101,7 @@ test:
 
 zigbuild:
     echo "Installing cargo-zigbuild"
-    @if ! command -v "cargo install cargo-zigbuild" &> /dev/null; then \
+    @if ! {{ zigbuild }}; then \
         echo "Installing cargo-zigbuild"; \
         cargo install cargo-zigbuild; \
     fi
